@@ -1,45 +1,43 @@
 #ifndef _GPIO_H_
 #define _GPIO_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 
-//Pi 2, 3, 4
-#define BCM2708_PERI_BASE        0x20000000
-#define BCM2709_PERI_BASE        0x3F000000
-#define BCM2711_PERI_BASE        0xFE000000
+/*
+ * Raspberry Pi 5. The 40-pin header is on the RP1, not the BCM GPIO block.
+ * CPU physical addresses:
+ *   RP1 io_bank0  0x1f000d0000
+ *   RP1 sys_rio0  0x1f000e0000
+ *   RP1 pads      0x1f000f0000
+ *   BCM2712 1 MHz system timer  0x107c003000
+ */
+#define RP1_IO_PHYS   0x1F000D0000ULL
+#define RP1_MAP_SIZE  0x21000
 
-#define BCM_BASE BCM2711_PERI_BASE
+#define RP1_IO_BANK0  0x00000
+#define RP1_SYS_RIO0  0x10000
+#define RP1_PADS0     0x20000
 
-#define GPIO_BASE (BCM_BASE + 0x200000)
-#define TIMER_CTRL (BCM_BASE + 0x3000)
+#define RIO_OUT       0x00
+#define RIO_OE        0x04
+#define RIO_IN        0x08
+#define RIO_SET       0x2000
+#define RIO_CLR       0x3000
 
-#define GPFSEL0      0
-#define GPFSEL1      1
-#define GPFSEL2      2
-#define GPFSEL3      3
-#define GPFSEL4      4
-#define GPFSEL5      5
-#define GPSET0       7
-#define GPSET1       8
-#define GPCLR0       10
-#define GPCLR1       11
-#define GPLEV0       13
-#define GPLEV1       14
+#define TIMER_PHYS    0x107C003000ULL
 
-#if (BCM_BASE) == (BCM2711_PERI_BASE)
-#define GPPUPPDN0 57
-#define GPPUPPDN1 58
-#define GPPUPPDN2 59
-#define GPPUPPDN3 60
-#else
-#define GPPUD        37
-#define GPPUDCLK0    38
-#define GPPUDCLK1    39
-#endif
+/* pud: 0 off, 1 up, 2 down — same meaning as the BCM2711 code */
+#define GPIO_PUD_OFF  0
+#define GPIO_PUD_UP   1
+#define GPIO_PUD_DOWN 2
 
-
-extern volatile uint32_t *gpio_base;
+extern volatile uint8_t *rp1_base;
 extern volatile uint32_t *timer_uS;
+
+static inline volatile uint32_t *rp1_reg(uint32_t offset) {
+    return (volatile uint32_t *)(rp1_base + offset);
+}
 
 static inline void gpio_busy_wait(uint32_t uS) {
     uint32_t start = *timer_uS;
@@ -47,10 +45,10 @@ static inline void gpio_busy_wait(uint32_t uS) {
 }
 
 static inline void gpio_set_bits(uint32_t bits) {
-    gpio_base[GPSET0] = bits;
+    *rp1_reg(RP1_SYS_RIO0 + RIO_OUT + RIO_SET) = bits;
 }
 static inline void gpio_clear_bits(uint32_t bits) {
-    gpio_base[GPCLR0] = bits;
+    *rp1_reg(RP1_SYS_RIO0 + RIO_OUT + RIO_CLR) = bits;
 }
 static inline void gpio_set_pin(int pin) {
     gpio_set_bits(1ul << pin);
@@ -60,7 +58,7 @@ static inline void gpio_clear_pin(int pin) {
 }
 
 static inline uint32_t gpio_get_bits(uint32_t bits) {
-    return gpio_base[GPLEV0] & bits;
+    return *rp1_reg(RP1_SYS_RIO0 + RIO_IN) & bits;
 }
 static inline int gpio_get_pin(int pin) {
     return gpio_get_bits(1ul << pin) != 0;
@@ -73,4 +71,3 @@ void gpio_init_out(int pin);
 bool gpio_init(void);
 
 #endif
-

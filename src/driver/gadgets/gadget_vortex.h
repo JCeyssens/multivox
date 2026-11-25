@@ -1,7 +1,12 @@
 #ifndef _GADGET_H_
 #define _GADGET_H_
 
-#define SPIN_SYNC 1
+/* OPB816Z phototransistor on GPIO 27. Open-collector, so the pad pull-up
+   holds the line high while a flag blocks the beam. One index per revolution.
+   Panel strobe used to be on this pin; it is GPIO 22 now. */
+#define SPIN_SYNC 27
+#define SPIN_SYNC_PULLUP
+#define SPIN_SYNC_INDEX
 
 #define RGB_0_B1 12
 #define RGB_0_G1 9
@@ -24,7 +29,7 @@
 
 #define RGB_BLANK 11
 #define RGB_CLOCK 23
-#define RGB_STROBE 27
+#define RGB_STROBE 22
 #define RGB_BLANK_MASK (1<<RGB_BLANK)
 #define RGB_CLOCK_MASK (1<<RGB_CLOCK)
 #define RGB_STROBE_MASK (1<<RGB_STROBE)

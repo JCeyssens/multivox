@@ -29,7 +29,16 @@ int compare_ints(const void *a, const void *b) {
     return *((int*)a) - *((int*)b);
 }
 
-#ifdef SYNC_PULSE_UNEQUAL
+#ifdef SPIN_SYNC_INDEX
+/* Each sample is already a full revolution (one flag pulse). */
+static uint32_t median_period() {
+    static uint32_t sorted[count_of(rotation_history)];
+    memcpy(sorted, rotation_history, sizeof(sorted));
+    qsort(sorted, count_of(sorted), sizeof(*sorted), compare_ints);
+
+    return sorted[count_of(rotation_history) / 2];
+}
+#elif defined(SYNC_PULSE_UNEQUAL)
 static uint32_t median_period() {
     // treat the rising and falling edges separately
     static uint32_t sorted[2][count_of(rotation_history[0])];
@@ -59,8 +68,35 @@ uint32_t rotation_current_angle(void) {
 
     int sync = gpio_get_pin(SPIN_SYNC);
     if (sync != sync_level) {
+#ifdef SPIN_SYNC_INDEX
+        int became_high = sync;
         sync_level = sync;
-        
+        /* OPB816Z: the flag blocks the beam once per turn. With the pull-up
+           that is a rising edge, and the gap between rising edges is one revolution. */
+        if (became_high) {
+            sync_prev = tick_curr;
+            rotation_period_raw = elapsed;
+            if (elapsed > 10000 && elapsed < 10000000) {
+                if (++current >= count_of(rotation_history)) {
+                    current = 0;
+                }
+                rotation_history[current] = elapsed;
+                rotation_period = median_period();
+                rotation_period = max(10000, rotation_period);
+
+                rotation_delta = ROTATION_FULL / rotation_period;
+                if (rotation_lock) {
+                    int32_t wrapped = (int32_t)(rotation_angle & ROTATION_MASK);
+                    if (wrapped >= (int32_t)ROTATION_HALF) {
+                        wrapped -= (int32_t)ROTATION_FULL;
+                    }
+                    int recentre = wrapped >> 17;
+                    recentre = clamp(recentre, -rotation_delta / 16, rotation_delta / 16);
+                    rotation_delta -= recentre;
+                }
+            }
+        }
+#else
         sync_prev = tick_curr;
         rotation_period_raw = elapsed * 2;
         if (elapsed > 10000 && elapsed < 10000000) {
@@ -78,6 +114,7 @@ uint32_t rotation_current_angle(void) {
                 rotation_delta -= recentre;
             }
         }
+#endif
     }
 
     rotation_stopped = (elapsed > 1000000);
