@@ -255,7 +255,7 @@ void* slicer_worker(void *vargp) {
             usleep(100);
         } else {
 #ifdef SLICER_PROFILE
-            uint32_t work_start = *timer_uS;
+            uint32_t work_start = timer_uS_now();
 #endif
             sliceidx = SLICE_WRAP(sliceidx + 1);
             bufferidx = SLICE_BUFFER_WRAP(sliceidx);
@@ -274,7 +274,7 @@ void* slicer_worker(void *vargp) {
             }
 
 #ifdef SLICER_PROFILE
-            uint32_t elapsed = *timer_uS - work_start;
+            uint32_t elapsed = timer_uS_now() - work_start;
             printf("%d uS\n", elapsed);
 #endif
             usleep(1);
@@ -539,7 +539,7 @@ int main(int argc, char** argv) {
 
     while (!killed) {
 #ifdef DEVELOPMENT_FEATURES
-        uint32_t frame_start = *timer_uS;
+        uint32_t frame_start = timer_uS_now();
 
         if (interactive) {
             if (!handle_keys()) {
@@ -640,7 +640,7 @@ int main(int argc, char** argv) {
         
 #ifdef DEVELOPMENT_FEATURES
         if (interactive) {
-            perf_period += *timer_uS - frame_start;
+            perf_period += timer_uS_now() - frame_start;
             if (perf_count >= 4096) {
                 buffer->microseconds_per_frame = perf_period / perf_count;
                 uint revs = 100000000 / rotation_period;

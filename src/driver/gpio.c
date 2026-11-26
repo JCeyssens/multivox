@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -16,7 +17,6 @@
 #include "gpio.h"
 
 volatile uint8_t *rp1_base;
-volatile uint32_t *timer_uS;
 
 /* RP1 io_bank0 FUNCSEL value that routes the pad to the SYS_RIO
    signal (function 5 in the RP1 GPIO function table; 6 is PROC_RIO,
@@ -80,8 +80,13 @@ static bool gpio_mapmem(void) {
      * Pi 5: the header GPIOs are on the RP1, reached over PCIe at
      * 0x1f00000000. The kernel exposes that window as /dev/gpiomem0
      * (rootless) covering io_bank0, sys_rio0 and pads; /dev/mem is the
-     * fallback. The 1 MHz system timer lives in the BCM2712 SoC and is
-     * only reachable through /dev/mem.
+     * fallback. The RP1 driver requires the full window to be mapped
+     * (see RP1_WINDOW_SIZE in gpio.h).
+     *
+     * The 1 MHz system timer used for busy-waits is no longer mapped:
+     * it lives in the BCM2712 SoC and user-space /dev/mem access to it
+     * is rejected on some Pi 5 kernels; timer_uS_now() uses
+     * CLOCK_MONOTONIC instead (see gpio.h).
      */
     int rp1fd = open("/dev/gpiomem0", O_RDWR | O_SYNC);
     size_t rp1_len = RP1_WINDOW_SIZE; /* the gpiomem driver only accepts a
@@ -97,32 +102,16 @@ static bool gpio_mapmem(void) {
         }
     }
 
-    int memfd = open("/dev/mem", O_RDWR | O_SYNC);
-    if (memfd < 0) {
-        perror("Can't open /dev/mem for the timer (must be root)");
-        close(rp1fd);
-        return false;
-    }
-
     void *rp1 = mmap(NULL, rp1_len, PROT_READ | PROT_WRITE, MAP_SHARED, rp1fd, rp1_off);
-    if (rp1 == MAP_FAILED) {
-        perror("mmap RP1 GPIO window (/dev/gpiomem0 or /dev/mem)");
-        close(rp1fd);
-        close(memfd);
-        return false;
-    }
-
-    void *timer_base = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, (off_t)TIMER_PHYS);
+    int err = errno;
     close(rp1fd);
-    close(memfd);
-
-    if (timer_base == MAP_FAILED) {
-        perror("mmap BCM2712 1 MHz timer (/dev/mem)");
+    if (rp1 == MAP_FAILED) {
+        errno = err;
+        perror("mmap RP1 GPIO window (/dev/gpiomem0 or /dev/mem)");
         return false;
     }
 
     rp1_base = (volatile uint8_t *)rp1;
-    timer_uS = (volatile uint32_t *)((uint8_t *)timer_base + 4); /* CLO, lower 32 bits of the 1 MHz counter */
 
     return true;
 }

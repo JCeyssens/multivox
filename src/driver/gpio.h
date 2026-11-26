@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 
 /*
  * Raspberry Pi 5 (BCM2712 + RP1). The 40-pin header is on the RP1 chip,
@@ -12,10 +13,10 @@
  *   RP1 io_bank0  0x1f000d0000   (GPIO_FUNC/STATUS registers)
  *   RP1 sys_rio0  0x1f000e0000   (host driven output/input registers)
  *   RP1 pads      0x1f000f0000   (pad control: pulls, enable, drive)
- *   BCM2712 1 MHz system timer  0x107c003000
  *
  * The RP1 window is exposed by the kernel as /dev/gpiomem0 (rootless);
- * see gpio_mapmem() in gpio.c.
+ * see gpio_mapmem() in gpio.c. The 1 MHz system timer (BCM2712,
+ * 0x107c003000) is no longer mapped - see timer_uS_now().
  */
 #define RP1_IO_PHYS   0x1F000D0000ULL
 #define RP1_MAP_SIZE  0x21000  /* what the driver actually touches (io_bank0 .. pads) */
@@ -36,23 +37,37 @@
 #define RIO_SET       0x2000
 #define RIO_CLR       0x3000
 
-#define TIMER_PHYS    0x107C003000ULL
-
 /* pud: 0 off, 1 up, 2 down - same meaning as the old BCM2711 code */
 #define GPIO_PUD_OFF  0
 #define GPIO_PUD_UP   1
 #define GPIO_PUD_DOWN 2
 
 extern volatile uint8_t *rp1_base;
-extern volatile uint32_t *timer_uS;
+
+/*
+ * Microsecond counter for timing and profiling. The original code read the
+ * 1 MHz system timer (Pi 4: 0x3F003000, Pi 5 / BCM2712: 0x107C003000)
+ * through /dev/mem; on the Pi 5 user-space /dev/mem access to the SoC is
+ * kernel-config dependent and rejected on some images, so use
+ * CLOCK_MONOTONIC instead - on arm64 the vDSO serves it in user space
+ * (~30 ns per read, faster than the old PCIe register access), needs no
+ * root, and works on every kernel.
+ * As with the old hardware counter this wraps at 2^32 uS (~71 minutes);
+ * all uses only take deltas, which wrap correctly.
+ */
+static inline uint32_t timer_uS_now(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)(((uint64_t)ts.tv_sec * 1000000) + (ts.tv_nsec / 1000));
+}
 
 static inline volatile uint32_t *rp1_reg(uint32_t offset) {
     return (volatile uint32_t *)(rp1_base + offset);
 }
 
 static inline void gpio_busy_wait(uint32_t uS) {
-    uint32_t start = *timer_uS;
-    while (*timer_uS - start <= uS);
+    uint32_t start = timer_uS_now();
+    while (timer_uS_now() - start <= uS);
 }
 
 static inline void gpio_set_bits(uint32_t bits) {

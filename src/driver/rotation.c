@@ -61,7 +61,7 @@ static uint32_t median_period() {
 #endif
 
 uint32_t rotation_current_angle(void) {
-    uint32_t tick_curr = *timer_uS;
+    uint32_t tick_curr = timer_uS_now();
     uint32_t elapsed = tick_curr - sync_prev;
     
     static uint32_t current = 0;
