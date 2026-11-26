@@ -25,11 +25,12 @@ out to support a second similar gadget. There are assumptions about the hardware
 * It consists of two HUB75 LED panels spinning around a vertical axis.
 * The panels use either ABCDE addressing or ABC shift register addressing.
 * It uses a single GPIO (a photodiode or similar) to sync to rotation - high for 180°, low for 180°.
-* It's running on a Raspberry Pi 4.
+* It's running on a Raspberry Pi 5.
 
 The GPIO mappings and panel layout are defined in `src/driver/gadgets/gadget_<name>.h`. GPIO is via memory mapped
-access - if you're using a different model of Pi you'll need to change `BCM_BASE` in the GPIO code. I haven't tested
-this, and you should probably assume it doesn't work.
+access to the RP1 chip (Pi 5 - the 40-pin header is not on the BCM2712); the register addresses are in
+`src/driver/gpio.h`, and the RP1 window is mapped through `/dev/gpiomem0` where available. Vortex is wired for
+the Adafruit Triple Matrix Bonnet using ports 2 and 3 (port 1 carries the rotation sync phototransistor on GPIO 27).
 
 Input is via a bluetooth gamepad - I've been using an Xbox controller, and the input system is based on the default
 mapping for that.
