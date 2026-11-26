@@ -18,7 +18,12 @@
  * see gpio_mapmem() in gpio.c.
  */
 #define RP1_IO_PHYS   0x1F000D0000ULL
-#define RP1_MAP_SIZE  0x21000
+#define RP1_MAP_SIZE  0x21000  /* what the driver actually touches (io_bank0 .. pads) */
+/* The kernel's /dev/gpiomem0 driver (raspberrypi-gpiomem.c) ignores the mmap
+   offset and rejects any mapping shorter than the full concatenated window
+   (io_bank0 + sys_rio0 + pads = 0x30000) with -EINVAL. Always map the whole
+   window when going through gpiomem0. */
+#define RP1_WINDOW_SIZE 0x30000
 
 #define RP1_IO_BANK0  0x00000
 #define RP1_SYS_RIO0  0x10000

@@ -84,9 +84,12 @@ static bool gpio_mapmem(void) {
      * only reachable through /dev/mem.
      */
     int rp1fd = open("/dev/gpiomem0", O_RDWR | O_SYNC);
+    size_t rp1_len = RP1_WINDOW_SIZE; /* the gpiomem driver only accepts a
+                                         mapping of the full window (else EINVAL) */
     off_t rp1_off = 0; /* the gpiomem0 window base is io_bank0 */
 
     if (rp1fd < 0) {
+        rp1_len = RP1_MAP_SIZE;
         rp1_off = (off_t)RP1_IO_PHYS;
         if ((rp1fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0) {
             perror("Can't open /dev/gpiomem0 or /dev/mem (must be root)");
@@ -101,13 +104,20 @@ static bool gpio_mapmem(void) {
         return false;
     }
 
-    void *rp1 = mmap(NULL, RP1_MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, rp1fd, rp1_off);
+    void *rp1 = mmap(NULL, rp1_len, PROT_READ | PROT_WRITE, MAP_SHARED, rp1fd, rp1_off);
+    if (rp1 == MAP_FAILED) {
+        perror("mmap RP1 GPIO window (/dev/gpiomem0 or /dev/mem)");
+        close(rp1fd);
+        close(memfd);
+        return false;
+    }
+
     void *timer_base = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, (off_t)TIMER_PHYS);
     close(rp1fd);
     close(memfd);
 
-    if (rp1 == MAP_FAILED || timer_base == MAP_FAILED) {
-        perror("mmap error");
+    if (timer_base == MAP_FAILED) {
+        perror("mmap BCM2712 1 MHz timer (/dev/mem)");
         return false;
     }
 
