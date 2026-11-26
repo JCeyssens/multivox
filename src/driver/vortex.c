@@ -436,10 +436,13 @@ static void init_angles(void) {}
 
 #ifndef ADDR_CLK
 
-// classic HUB75E direct row address
+// classic HUB75E direct row address. Verified on the active panels: the
+// row decoder maps address a -> row a with row 0 at the TOP of the panel
+// (the earlier PANEL_FIELD_HEIGHT-1-row inversion rendered every panel
+// half vertically flipped).
 static void set_matrix_row(uint row) {
 
-    uint a = PANEL_FIELD_HEIGHT - 1 - row;
+    uint a = row;
     uint32_t rowbits = ((a & 0x01) << ROW_A)
                      | ((a & 0x02) << (ROW_B-1))
                      | ((a & 0x04) << (ROW_C-2))
